@@ -1,0 +1,34 @@
+##
+# MACD を計算する
+#
+import datetime
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+%matplotlib inline
+
+# 日経平均プロフィルさんから日経平均日足データを読み出し
+df = pd.read_csv("https://indexes.nikkei.co.jp/nkave/historical/nikkei_stock_average_daily_jp.csv", encoding="SHIFT-JIS", names=['date', 'close', 'open', 'high', 'low'], header=1);
+df = df.dropna() # 最後のコメント行を削除
+
+# 指数平滑移動平均計算
+def calc_ema(prices, period):
+    ema = np.zeros(len(prices))
+    ema[:] = np.nan # NaN で初期化
+    ema[period-1] = prices[:period].mean() # 最初だけ単純移動平均
+    for d in range(period, len(prices)):
+        ema[d] = ema[d-1] + (prices[d] - ema[d-1]) / (period + 1) * 2
+    return ema
+
+# MACD 計算
+def calc_macd(prices, period_short, period_long, period_signal):
+    ema_short = calc_ema(prices, period_short)
+    ema_long = calc_ema(prices, period_long)
+    macd = ema_short - ema_long # MACD = 短期移動平均 - 長期移動平均
+    signal = pd.Series(macd).rolling(period_signal).mean() # シグナル = MACD の移動平均
+    hist = macd - signal
+    return macd, signal, hist
+
+df['macd'], df['signal'], df['hist'] = calc_macd(df.close, 12, 26, 9)
+
+df

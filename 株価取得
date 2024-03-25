@@ -1,0 +1,160 @@
+import os
+import datetime as dt
+import pandas_datareader.data as web
+import subprocess
+import matplotlib.pyplot as plt
+#import numpy as num
+#!pip install install mplfinance
+#!pip3 uninstall numpy
+#!pip3 install numpy
+#!pip3 uninstall pandas_ta
+#import numpy.core.multiarray
+#mport pandas as pd
+#!pip install ta
+from ta import add_all_ta_features
+from ta.utils import dropna
+import datetime
+import numpy as np
+import pandas as pd
+%matplotlib inline
+
+import mplfinance as mpf
+from pandas_datareader import data
+import ta
+from ta import add_all_ta_features
+from ta.utils import dropna
+
+#銘柄コード
+#2914 JT
+
+#!curl -L http://prdownloads.sourceforge.net/ta-lib/ta-lib-0.4.0-src.tar.gz -O && tar xzvf ta-lib-0.4.0-src.tar.gz
+#!cd ta-lib && ./configure --prefix=/usr && make && make install && cd - && pip install ta-lib
+
+def  company_stock(start,ticker_symbol):
+ # 銘柄コード,終了日の定義
+ ticker_symbol_dr = ticker_symbol + ".JP" 
+ end = dt.date.today()
+
+# start以降の株価データ取得
+ df = web.DataReader(ticker_symbol_dr, data_source='stooq', start=start, end=end)
+
+# x軸とY軸の設定
+ date=df.index
+ price=df['Close']
+
+#移動平均の追加
+ sam01=5
+ sam02=30
+ sam03=60
+
+ df['sam01']=price.rolling(window=sam01).mean()
+ df['sam02']=price.rolling(window=sam02).mean()
+ df['sam03']=price.rolling(window=sam03).mean()
+
+ short=df['sam01']
+ Long=df['sam02']
+# 差分を計算する
+ diff = short - Long
+# diffの各値を直前のデータで引く　2ならゴールデンクロス(GC), -2ならデッドクロス(DC)と判定する
+ cross = np.where(np.sign(diff) - np.sign(diff.shift(1)) == 2, "GC", np.where(np.sign(diff) - np.sign(diff.shift(1)) == -2, "DC", np.nan))
+ 
+#グラフサイズ
+ plt.figure(figsize=(20,10))
+
+# ローソク足
+ mpf.plot(df,type='candle',figsize=(20,10),style='starsandstripes',volume=True)
+
+
+#価格グラフ描画
+# plt.subplot(2,1,1)
+# plt.plot(date,price,label='close')
+# plt.plot(date,df['sam01'],label='sam01')
+# plt.plot(date,df['sam02'],label='sam02')
+# plt.plot(date,df['sam03'],label='sam03')
+# plt.legend()
+
+#出来高グラフ描画
+# plt.subplot(2,1,2)
+# plt.bar(date,df['Volume'],label='volume')
+# plt.legend()
+
+company_stock('2023-01-01','2914')
+
+# 指数平滑移動平均計算
+def calc_ema(prices, period):
+    ema = np.zeros(len(prices))
+    ema[:] = np.nan # NaN で初期化
+    ema[period-1] = prices[:period].mean() # 最初だけ単純移動平均
+    for d in range(period, len(prices)):
+        ema[d] = ema[d-1] + (prices[d] - ema[d-1]) / (period + 1) * 2
+    return ema
+
+# MACD 計算
+def calc_macd(prices, period_short, period_long, period_signal):
+    ema_short = calc_ema(prices, period_short)
+    ema_long = calc_ema(prices, period_long)
+    macd = ema_short - ema_long # MACD = 短期移動平均 - 長期移動平均
+    signal = pd.Series(macd).rolling(period_signal).mean() # シグナル = MACD の移動平均
+    hist = macd - signal
+    return macd, signal, hist
+#MACD作成
+df['macd'], df['signal'], df['hist'] = calc_macd(df.close, 12, 26, 9)
+
+import numpy as np
+import pandas as pd
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+def  company_cross(start,ticker_symbol):
+ # 銘柄コード,終了日の定義
+ ticker_symbol_dr = ticker_symbol + ".JP" 
+ end = dt.date.today()
+
+# start以降の株価データ取得
+ df = web.DataReader(ticker_symbol_dr, data_source='stooq', start=start, end=end)
+
+# x軸とY軸の設定
+ date=df.index
+ price=df['Close']
+
+#移動平均の追加
+ sam01=5
+ sam02=30
+ sam03=60
+
+ df['sam01']=price.rolling(window=sam01).mean()
+ df['sam02']=price.rolling(window=sam02).mean()
+ df['sam03']=price.rolling(window=sam03).mean()
+
+ short=df['sam01']
+ Long=df['sam02']
+# 差分を計算する
+ diff = short - Long
+# diffの各値を直前のデータで引く　2ならゴールデンクロス(GC), -2ならデッドクロス(DC)と判定する
+ cross = np.where(np.sign(diff) - np.sign(diff.shift(1)) == 2, "GC", np.where(np.sign(diff) - np.sign(diff.shift(1)) == -2, "DC", np.nan))
+ return cross
+
+# figを定義
+ fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.05, row_width=[0.2, 0.7], x_title="Date")
+ 
+# Candlestick 
+ fig.add_trace(
+    go.Candlestick(x=df["datetime"], open=df["open"], high=df["high"], low=df["low"], close=df["close"], name="OHLC"),
+    row=1, col=1
+  )
+ 
+# SMA
+ fig.add_trace(go.Scatter(x=df["datetime"], y=df["SMA5"], name="SMA5", mode="lines"), row=1, col=1)
+ fig.add_trace(go.Scatter(x=df["datetime"], y=df["SMA25"], name="SMA25", mode="lines"), row=1, col=1)
+ 
+# ゴールデンクロス
+ fig.add_trace(go.Scatter(x=df[df["cross"]=="GC"]["datetime"], y=df[df["cross"]=="GC"]["SMA5"]*0.98, name="GC", mode="markers", marker_symbol="triangle-up", marker_size=10, marker_color="black"), row=1, col=1)
+ 
+# デッドクロス 
+ fig.add_trace(go.Scatter(x=df[df["cross"]=="DC"]["datetime"], y=df[df["cross"]=="DC"]["SMA5"]*1.02, name="DC", mode="markers", marker_symbol="triangle-down", marker_size=10, marker_color="black"), row=1, col=1)
+
+ fig.update(layout_xaxis_rangeslider_visible=False)
+ fig.show()
+ 
+
+ company_cross('2023-01-01','2410')
+ 
